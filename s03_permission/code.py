@@ -208,12 +208,15 @@ def agent_loop(messages: list):
             if block.type != "tool_use":
                 continue
 
+            # Debug
+            print(block.name, block.input)
+
             print(f"\033[36m> {block.name}\033[0m")
 
             # s03 change: run through permission pipeline before executing
             if not check_permission(block):
                 results.append({"type": "tool_result", "tool_use_id": block.id,
-                                "content": "Permission denied."})
+                                "content": "Permission denied. Do not retry this action."})
                 continue
 
             handler = TOOL_HANDLERS.get(block.name)

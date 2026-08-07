@@ -36,8 +36,12 @@ WORKDIR = Path.cwd()
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
-SYSTEM = f"You are a coding agent at {WORKDIR}. Use tools to solve tasks. Act, don't explain."
-
+# SYSTEM = f"You are a coding agent at {WORKDIR}. Use tools to solve tasks. Act, don't explain."
+SYSTEM = f"""
+You are a coding agent at {os.getcwd()}.
+You are running on Windows using cmd.exe.
+Use shell commands to solve tasks. Act, don't explain.
+"""
 
 # ═══════════════════════════════════════════════════════════
 #  FROM s01 (unchanged)
@@ -49,7 +53,7 @@ def run_bash(command: str) -> str:
         return "Error: Dangerous command blocked"
     try:
         r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                           capture_output=True, text=True,
+                           capture_output=True, text=True, 
                            encoding="utf-8", errors="replace", timeout=120)
         out = (r.stdout + r.stderr).strip()
         return out[:50000] if out else "(no output)"
