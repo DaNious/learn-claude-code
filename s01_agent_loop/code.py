@@ -19,8 +19,8 @@ The entire secret of an AI coding agent in one pattern:
                           (loop continues)
 
 This is the core loop: feed tool results back to the model
-until the model decides to stop. Production agents layer
-policy, hooks, and lifecycle controls on top.
+until the model decides to stop. Later chapters add policy,
+hooks, and lifecycle controls around it.
 
 Usage:
     pip install anthropic python-dotenv
@@ -32,7 +32,7 @@ import subprocess
 
 try:
     import readline
-    # macOS 的 libedit 在处理中文输入时有退格问题，这四行修复它
+    # #143 UTF-8 backspace fix for macOS libedit
     readline.parse_and_bind('set bind-tty-special-chars off')
     readline.parse_and_bind('set input-meta on')
     readline.parse_and_bind('set output-meta on')
@@ -58,7 +58,7 @@ You are running on Windows using cmd.exe.
 Use shell commands to solve tasks. Act, don't explain.
 """
 
-# ── Tool definition: just bash ────────────────────────────
+# -- Tool definition: just bash --
 TOOLS = [{
     "name": "bash",
     "description": "Run a shell command.",
@@ -70,7 +70,7 @@ TOOLS = [{
 }]
 
 
-# ── Tool execution ────────────────────────────────────────
+# -- Tool execution --
 def run_bash(command: str) -> str:
     dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
     if any(d in command for d in dangerous):
@@ -87,7 +87,7 @@ def run_bash(command: str) -> str:
         return f"Error: {e}"
 
 
-# ── The core pattern: a while loop that calls tools until the model stops ──
+# -- The core pattern: a while loop that calls tools until the model stops --
 def agent_loop(messages: list):
     while True:
         response = client.messages.create(
@@ -119,10 +119,10 @@ def agent_loop(messages: list):
         messages.append({"role": "user", "content": results})
 
 
-# ── Entry point ──────────────────────────────────────────
+# -- Entry point --
 if __name__ == "__main__":
     print("s01: Agent Loop")
-    print("输入问题，回车发送。输入 q 退出。\n")
+    print("Enter a question, press Enter to send. Type q to quit.\n")
 
     history = []
     while True:
