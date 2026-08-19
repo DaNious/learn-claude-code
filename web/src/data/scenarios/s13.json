@@ -32,21 +32,33 @@
     },
     {
       "type": "tool_call",
-      "toolName": "create_worktree",
-      "content": "{\"name\":\"auth-refactor\",\"task_id\":\"task_1a2b3c4d\"}",
-      "annotation": "The worktree directory is recorded on the task instead of managed as a separate workflow or security sandbox."
-    },
-    {
-      "type": "tool_call",
       "toolName": "create_task",
-      "content": "{\"subject\":\"Update authentication tests\",\"blockedBy\":[\"task_1a2b3c4d\"]}",
-      "annotation": "The task graph keeps dependent work from starting early."
+      "content": "{\"subject\":\"Update authentication tests\"}",
+      "annotation": "The Lead creates every task node before adding graph edges."
     },
     {
       "type": "tool_result",
       "toolName": "create_task",
-      "content": "Created task_5e6f7a8b: Update authentication tests (blockedBy: task_1a2b3c4d)",
+      "content": "Created task_5e6f7a8b: Update authentication tests",
       "annotation": "The second generated ID names the dependent task that the test teammate will later claim."
+    },
+    {
+      "type": "tool_call",
+      "toolName": "update_task",
+      "content": "{\"task_id\":\"task_5e6f7a8b\",\"addBlockedBy\":[\"task_1a2b3c4d\"]}",
+      "annotation": "Only the Lead links tasks using IDs already returned by the runtime."
+    },
+    {
+      "type": "tool_result",
+      "toolName": "update_task",
+      "content": "Updated task_5e6f7a8b blockedBy: task_1a2b3c4d",
+      "annotation": "The dependency is fixed before teammates begin claiming work."
+    },
+    {
+      "type": "tool_call",
+      "toolName": "create_worktree",
+      "content": "{\"name\":\"auth-refactor\",\"task_id\":\"task_1a2b3c4d\"}",
+      "annotation": "The worktree directory is recorded on the task instead of managed as a separate workflow or security sandbox."
     },
     {
       "type": "tool_call",

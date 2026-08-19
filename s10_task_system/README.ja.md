@@ -26,7 +26,7 @@ TodoWrite は、こうした依存関係や担当を記録しない。「API を
 
 ![Task System Overview](images/task-system-overview.ja.svg)
 
-コードは S04 の 5 つの基本ツール、Permission、Hooks、共通の `execute_tool` を保ち、そこへ 5 つのタスクツール、`.tasks/` ディレクトリへの永続化、`blockedBy` の依存チェックを追加する。
+コードは S04 の 5 つの基本ツール、Permission、Hooks、共通の `execute_tool` を保ち、そこへ 6 つのタスクツール、`.tasks/` ディレクトリへの永続化、`blockedBy` の依存チェックを追加する。
 
 TodoWrite vs Task System：
 
@@ -69,12 +69,22 @@ ID は `task_` と 8 桁のランダムな 16 進文字で生成する。ファ�
 ### create_task: タスク作成
 
 ```python
-def create_task(subject: str, description: str = "",
-                blockedBy: list[str] | None = None) -> Task:
-    return TASKS.create(subject, description, blockedBy)
+def create_task(subject: str, description: str = "") -> Task:
+    return TASKS.create(subject, description)
 ```
 
-`TaskStore.create` は subject と依存 ID を確認し、`.tasks/{id}.json` に書き込む。`blockedBy` で依存を宣言し、例えば「API を書く」タスクはデータベースタスクの ID を参照できる。
+`TaskStore.create` は subject を確認し、ランダム ID を割り当てて `.tasks/{id}.json` に書き込む。新しいタスクの `blockedBy` は常に空で、ツール結果が実行時に生成された ID をモデルへ返す。
+
+### update_task: 返された ID で依存を追加
+
+```python
+def update_task(task_id: str, addBlockedBy: list[str]) -> Task:
+    return TASKS.update_dependencies(task_id, addBlockedBy)
+```
+
+タスクグラフは 2 段階で構築する。まず全ノードを作成し、その後 `create_task` が返した ID を使って `update_task` で辺を追加する。モデルが 1 回の応答で複数のツール呼び出しを出す場合、同じ階層の呼び出しはツール結果が返る前にすべて確定するため、ある `create_task` は別の呼び出しで生成されたばかりの ID を利用できない。
+
+`update_task` は変更全体を検証してから保存する。対象と依存タスクは存在し、対象は pending かつ未所有でなければならず、自己依存や循環も禁止する。既存の辺を再度追加しても重複しない。
 
 ### can_start: 依存チェック
 
@@ -159,11 +169,16 @@ pending ──claim──→ in_progress ──complete──→ completed
 ### 組み合わせて実行
 
 ```python
-# 依存関係のあるタスクを作成
+# 第 1 段階：全ノードを作成して実行時 ID を受け取る
 schema = create_task("setup database schema")
-endpoints = create_task("create API endpoints", blockedBy=[schema.id])
-tests = create_task("write tests", blockedBy=[endpoints.id])
-docs = create_task("write docs", blockedBy=[schema.id])
+endpoints = create_task("create API endpoints")
+tests = create_task("write tests")
+docs = create_task("write docs")
+
+# 第 2 段階：返された ID で依存の辺を追加する
+update_task(endpoints.id, addBlockedBy=[schema.id])
+update_task(tests.id, addBlockedBy=[endpoints.id])
+update_task(docs.id, addBlockedBy=[schema.id])
 
 # Agent が最初に実行可能なタスクを引き受ける
 claim_task(schema.id)       # ✓ Claimed（依存なし）
@@ -179,7 +194,7 @@ claim_task(tests.id)        # ✓ Claimed（endpoints 完了済み）
 complete_task(tests.id)     # ✓ Completed
 ```
 
-各 `create_task` が JSON ファイルを書き込み、各 `claim_task` / `complete_task` がファイルを更新。セッションをまたいでも `.tasks/` ディレクトリが残り、Agent はファイルを読んで進捗を復旧。
+各 `create_task` が JSON ファイルを書き込み、`update_task`、`claim_task`、`complete_task` がファイルを更新する。セッションをまたいでも `.tasks/` ディレクトリが残り、Agent はファイルを読んで進捗を復旧できる。
 
 ---
 
@@ -208,4 +223,4 @@ python s10_task_system/code.py
 s11 Background Tasks → 遅い操作をバックグラウンドで実行する。Agent は他のタスクの処理を続け、バックグラウンド処理の完了後に通知を受け取る。
 
 
-<!-- translation-sync: zh@v4, en@v4, ja@v4 -->
+<!-- translation-sync: zh@v5, en@v5, ja@v5 -->

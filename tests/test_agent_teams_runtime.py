@@ -123,6 +123,13 @@ def claim_in_child(lesson_path: str, root: str, task_id: str, owner: str,
     results.put(lesson.claim_task(task_id, owner=owner))
 
 
+def update_in_child(lesson_path: str, root: str, task_id: str,
+                    dependency_id: str, barrier, results):
+    lesson = load_lesson(Path(root), Path(lesson_path))
+    barrier.wait()
+    results.put(lesson.run_update_task(task_id, [dependency_id]))
+
+
 class AgentTeamsRuntimeTests(unittest.TestCase):
     def test_downstream_lessons_execute_the_merged_runtime_contract(self):
         for lesson_path in RUNTIME_LESSONS:
@@ -139,6 +146,54 @@ class AgentTeamsRuntimeTests(unittest.TestCase):
                     self.assertIn("alice", lesson.teammate_assignments)
                     self.assertTrue(lesson.release_completed_assignment("alice"))
                     self.assertNotIn("alice", lesson.teammate_assignments)
+
+    def test_task_dependencies_use_runtime_ids_and_are_lead_only(self):
+        for lesson_path in RUNTIME_LESSONS:
+            with self.subTest(lesson=lesson_path.parent.name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    lesson = load_lesson(Path(tmp), lesson_path)
+                    tool_defs = getattr(lesson, "TOOLS", None)
+                    if tool_defs is None:
+                        tool_defs = lesson.BUILTIN_TOOLS
+                    tools = {tool["name"]: tool for tool in tool_defs}
+
+                    self.assertIn("update_task", tools)
+                    self.assertNotIn(
+                        "blockedBy",
+                        tools["create_task"]["input_schema"]["properties"],
+                    )
+                    self.assertIn(
+                        "runtime-generated IDs",
+                        lesson.PROMPT_SECTIONS["tasks"],
+                    )
+
+                    dependency = lesson.create_task("Create schema")
+                    target = lesson.create_task("Write API")
+                    self.assertIn(
+                        "Updated",
+                        lesson.run_update_task(target.id, [dependency.id]),
+                    )
+                    self.assertEqual(
+                        lesson.load_task(target.id).blockedBy, [dependency.id]
+                    )
+
+                    captured_tools = []
+
+                    def stop_after_capture(**kwargs):
+                        captured_tools.extend(
+                            tool["name"] for tool in kwargs["tools"]
+                        )
+                        raise RuntimeError("stop after capturing teammate tools")
+
+                    lesson.client.messages.create = stop_after_capture
+                    lesson.spawn_teammate_thread(
+                        "tool-auditor", "reviewer", "Inspect the task board."
+                    )
+                    self.assertTrue(wait_until(
+                        lambda: "tool-auditor" not in lesson.active_teammates
+                    ))
+                    self.assertIn("claim_task", captured_tools)
+                    self.assertNotIn("update_task", captured_tools)
 
     def test_inbox_delivery_is_runtime_owned(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -669,6 +724,9 @@ class AgentTeamsRuntimeTests(unittest.TestCase):
                             with self.subTest(tool=tool_name, task_id=task_id):
                                 result = getattr(lesson, tool_name)(task_id)
                                 self.assertIn("Error:", result)
+                        self.assertIn(
+                            "Error:", lesson.run_update_task(task_id, [])
+                        )
 
     def test_plan_gate_blocks_mutating_tools_until_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1620,6 +1678,55 @@ class AgentTeamsRuntimeTests(unittest.TestCase):
                     persisted = lesson.load_task(task.id)
                     self.assertEqual(persisted.status, "in_progress")
                     self.assertIn(persisted.owner, {"alice", "bob"})
+
+    def test_dependency_updates_are_atomic_across_processes(self):
+        context = multiprocessing.get_context("spawn")
+        for lesson_path in RUNTIME_LESSONS:
+            with self.subTest(lesson=lesson_path.parent.name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    lesson = load_lesson(Path(tmp), lesson_path)
+                    first = lesson.create_task("First")
+                    second = lesson.create_task("Second")
+                    barrier = context.Barrier(3)
+                    results = context.Queue()
+                    workers = [
+                        context.Process(
+                            target=update_in_child,
+                            args=(
+                                str(lesson_path), tmp, task_id, dependency_id,
+                                barrier, results,
+                            ),
+                        )
+                        for task_id, dependency_id in (
+                            (first.id, second.id),
+                            (second.id, first.id),
+                        )
+                    ]
+
+                    for worker in workers:
+                        worker.start()
+                    barrier.wait()
+                    for worker in workers:
+                        worker.join(5)
+                        self.assertEqual(worker.exitcode, 0)
+                    outcomes = [results.get(timeout=1) for _ in workers]
+
+                    self.assertEqual(
+                        sum(outcome.startswith("Updated ") for outcome in outcomes),
+                        1,
+                    )
+                    self.assertEqual(
+                        sum("Dependency cycle detected" in outcome
+                            for outcome in outcomes),
+                        1,
+                    )
+                    persisted = {
+                        first.id: lesson.load_task(first.id).blockedBy,
+                        second.id: lesson.load_task(second.id).blockedBy,
+                    }
+                    self.assertEqual(
+                        sum(bool(value) for value in persisted.values()), 1
+                    )
 
     def test_plan_approval_cannot_cross_assignment_boundary(self):
         for lesson_path in RUNTIME_LESSONS:

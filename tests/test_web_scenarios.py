@@ -25,6 +25,47 @@ def load_lesson(name: str, script: Path):
     return module
 
 
+def test_s10_scenario_builds_the_task_graph_in_two_phases() -> None:
+    steps = load_scenario("s10")["steps"]
+    create_calls = [
+        (index, json.loads(step["content"]))
+        for index, step in enumerate(steps)
+        if step.get("toolName") == "create_task"
+        and step["type"] == "tool_call"
+    ]
+    create_results = [
+        (index, step["content"])
+        for index, step in enumerate(steps)
+        if step.get("toolName") == "create_task"
+        and step["type"] == "tool_result"
+    ]
+    update_index = next(
+        index for index, step in enumerate(steps)
+        if step.get("toolName") == "update_task"
+        and step["type"] == "tool_call"
+    )
+    update = json.loads(steps[update_index]["content"])
+    task_ids = [
+        re.fullmatch(r"Created (task_[0-9a-f]{8}): .+", content).group(1)
+        for _, content in create_results
+    ]
+
+    assert len(create_calls) == len(create_results) == 2
+    assert all("blockedBy" not in content for _, content in create_calls)
+    assert max(index for index, _ in create_results) < update_index
+    assert update == {
+        "task_id": task_ids[1],
+        "addBlockedBy": [task_ids[0]],
+    }
+    claim_inputs = [
+        json.loads(step["content"])
+        for step in steps
+        if step.get("toolName") == "claim_task"
+        and step["type"] == "tool_call"
+    ]
+    assert all(set(claim_input) == {"task_id"} for claim_input in claim_inputs)
+
+
 def test_s13_scenario_uses_the_real_plan_protocol() -> None:
     steps = load_scenario("s13")["steps"]
     spawn = next(
@@ -48,6 +89,21 @@ def test_s13_scenario_uses_the_real_plan_protocol() -> None:
         index for index, step in enumerate(steps)
         if "plan_approval_response" in step.get("content", "")
     )
+    create_indices = [
+        index for index, step in enumerate(steps)
+        if step.get("toolName") == "create_task"
+        and step["type"] == "tool_call"
+    ]
+    update_index = next(
+        index for index, step in enumerate(steps)
+        if step.get("toolName") == "update_task"
+        and step["type"] == "tool_call"
+    )
+    first_spawn_index = next(
+        index for index, step in enumerate(steps)
+        if step.get("toolName") == "spawn_teammate"
+        and step["type"] == "tool_call"
+    )
 
     review = json.loads(steps[review_index]["content"])
     spawn_input = json.loads(spawn["content"])
@@ -58,6 +114,15 @@ def test_s13_scenario_uses_the_real_plan_protocol() -> None:
     assert re.fullmatch(r"req_\d{6}", review["request_id"])
     assert review["approve"] is True
     assert "approved" not in review
+    assert all(
+        "blockedBy" not in json.loads(steps[index]["content"])
+        for index in create_indices
+    )
+    assert max(create_indices) < update_index < first_spawn_index
+    assert json.loads(steps[update_index]["content"]) == {
+        "task_id": "task_5e6f7a8b",
+        "addBlockedBy": ["task_1a2b3c4d"],
+    }
 
 
 def test_s15_scenario_calls_the_discovered_mcp_tool() -> None:

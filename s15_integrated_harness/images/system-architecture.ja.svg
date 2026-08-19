@@ -74,7 +74,7 @@
   <text x="718" y="407" fill="#0f766e" font-size="9">s14 MCP tools</text>
   <path d="M 790 318 L 790 188" fill="none" stroke="#0d9488" stroke-width="1.3" marker-end="url(#arrow-green)" stroke-dasharray="5,3"/>
   <rect x="70" y="462" width="780" height="112" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
-  <text x="460" y="487" text-anchor="middle" fill="#1e293b" font-size="12" font-weight="700">TOOL POOL: 25 builtins + dynamic mcp__server__tool</text>
+  <text x="460" y="487" text-anchor="middle" fill="#1e293b" font-size="12" font-weight="700">TOOL POOL: 26 builtins + dynamic mcp__server__tool</text>
   <text x="95" y="512" fill="#334155" font-size="9">file/shell: bash · read · write · edit · glob</text>
   <text x="95" y="530" fill="#334155" font-size="9">single-agent: todo_write · task · load_skill · compact</text>
   <text x="95" y="548" fill="#334155" font-size="9">durable work: task tools · cron tools</text>

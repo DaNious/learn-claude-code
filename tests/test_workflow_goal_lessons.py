@@ -473,8 +473,9 @@ def test_workflow_default_entry_extends_the_real_s15_host(
     tools, handlers = host.assemble_tool_pool()
     names = [tool["name"] for tool in tools]
 
-    assert len(host.BUILTIN_TOOLS) == 25
+    assert len(host.BUILTIN_TOOLS) == 26
     assert names[:-1] == [tool["name"] for tool in host.BUILTIN_TOOLS]
+    assert "update_task" in names
     assert names[-1] == "Workflow"
     assert handlers["Workflow"] is workflow.run_workflow_sync
     assert handlers["Workflow"](name="missing") == (

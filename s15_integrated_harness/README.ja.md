@@ -79,12 +79,12 @@ loop 自体は同じ構造のままだ。model を呼び、response に `tool_us
 
 ### Tools と Dispatch
 
-built-in tool pool には 25 個の tool がある：
+built-in tool pool には 26 個の tool がある：
 
 ```text
 bash, read_file, write_file, edit_file, glob
 todo_write, task, load_skill, compact
-create_task, list_tasks, get_task, claim_task, complete_task
+create_task, update_task, list_tasks, get_task, claim_task, complete_task
 schedule_cron, list_crons, cancel_cron
 spawn_teammate, list_teammates, send_message
 request_shutdown, request_plan, review_plan
@@ -126,6 +126,8 @@ S15 には 2 層の plan がある：
 前者は単独 agent の drift を防ぐ。後者は team coordination の土台になる。
 
 目的は近いが実装は別である。`todo_write` は現在のセッションのチェックリスト全体を置き換え、task record は安定 ID と個別のライフサイクル更新を持つ。次節の独立した `task` ツールは「隔離 subagent を一度派遣する」意味であり、Task System ではない。
+
+統合 host でもタスクグラフは 2 段階で構築する。Lead はまず全タスクノードを作成し、`create_task` が返した実行時 ID で `update_task` を呼ぶ。チームメイトが使えるのは一覧・Claim・完了だけなので、依存構造は仕事を配る前に Lead が確定する。
 
 ### Subagent と Team
 
@@ -238,4 +240,4 @@ python s15_integrated_harness/code.py
 
 [s16 Workflow Runtime](../s16_workflow_runtime/) は、この host に `Workflow` tool を追加する。Workflow は固定された orchestration path を code に置き、進行状況を記録して同じ run を再開できるようにする。
 
-<!-- translation-sync: zh@v13, en@v13, ja@v13 -->
+<!-- translation-sync: zh@v14, en@v14, ja@v14 -->

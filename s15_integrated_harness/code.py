@@ -205,16 +205,11 @@ def _task_path(task_id: str) -> Path:
     return path
 
 
-def create_task(subject: str, description: str = "",
-                blockedBy: list[str] | None = None) -> Task:
+def create_task(subject: str, description: str = "") -> Task:
     subject = subject.strip()
     if not subject:
         raise ValueError("Task subject cannot be empty")
-    dependencies = list(dict.fromkeys(blockedBy or []))
     with task_store_lock():
-        for dependency in dependencies:
-            if not _task_path(dependency).is_file():
-                raise ValueError(f"Dependency not found: {dependency}")
         for _ in range(100):
             task = Task(
                 id=f"task_{secrets.token_hex(4)}",
@@ -222,7 +217,7 @@ def create_task(subject: str, description: str = "",
                 description=description,
                 status="pending",
                 owner=None,
-                blockedBy=dependencies,
+                blockedBy=[],
             )
             try:
                 with _task_path(task.id).open("x", encoding="utf-8") as handle:
@@ -231,6 +226,55 @@ def create_task(subject: str, description: str = "",
             except FileExistsError:
                 continue
     raise RuntimeError("Could not allocate a unique task ID")
+
+
+def _task_depends_on(task_id: str, target_id: str) -> bool:
+    """Return whether task_id transitively depends on target_id."""
+    pending = [task_id]
+    visited = set()
+    while pending:
+        current = pending.pop()
+        if current == target_id:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        pending.extend(load_task(current).blockedBy)
+    return False
+
+
+def update_task(task_id: str, addBlockedBy: list[str]) -> Task:
+    """Add dependency edges after create_task has returned real task IDs."""
+    if not isinstance(addBlockedBy, list):
+        raise ValueError("addBlockedBy must be a list of task IDs")
+
+    with task_store_lock():
+        task = load_task(task_id)
+        if task.status != "pending" or task.owner is not None:
+            raise ValueError(
+                f"Task {task_id} dependencies can only be updated while "
+                "pending and unowned"
+            )
+
+        dependencies = list(dict.fromkeys(addBlockedBy))
+        for dependency in dependencies:
+            if dependency == task_id:
+                raise ValueError("Task cannot depend on itself")
+            if not _task_path(dependency).is_file():
+                raise ValueError(f"Dependency not found: {dependency}")
+            if dependency not in task.blockedBy and _task_depends_on(
+                dependency, task_id
+            ):
+                raise ValueError(
+                    f"Dependency cycle detected: {task_id} -> {dependency}"
+                )
+
+        task.blockedBy.extend(
+            dependency for dependency in dependencies
+            if dependency not in task.blockedBy
+        )
+        save_task(task)
+        return task
 
 
 def save_task(task: Task):
@@ -737,12 +781,18 @@ PROMPT_SECTIONS = {
     "identity": "You are a coding agent. Act, don't explain.",
     "tools": "Available tools: bash, read_file, write_file, edit_file, glob, "
              "todo_write, task, load_skill, compact, "
-             "create_task, list_tasks, get_task, claim_task, complete_task, "
+             "create_task, update_task, list_tasks, get_task, claim_task, "
+             "complete_task, "
              "schedule_cron, list_crons, cancel_cron, "
              "spawn_teammate, list_teammates, send_message, "
              "request_shutdown, request_plan, review_plan, "
              "create_worktree, "
              "connect_mcp. MCP tools are prefixed mcp__{server}__{tool}.",
+    "tasks": (
+        "Create all task nodes first. Only after create_task returns "
+        "runtime-generated IDs, use update_task with those exact IDs to add "
+        "dependencies. Only the Lead changes task dependencies."
+    ),
     "teams": (
         "When parallel work would help, first propose a small team with clear "
         "responsibilities and wait for the user's confirmation. Do not call "
@@ -777,6 +827,7 @@ def assemble_system_prompt(context: dict) -> str:
     # memory, skill catalog, MCP state, and active teammates become visible.
     sections = [PROMPT_SECTIONS["identity"],
                 PROMPT_SECTIONS["tools"],
+                PROMPT_SECTIONS["tasks"],
                 PROMPT_SECTIONS["teams"],
                 PROMPT_SECTIONS["workspace"],
                 PROMPT_SECTIONS["memory"],
@@ -2620,12 +2671,22 @@ def run_create_worktree(name: str, task_id: str) -> str:
 
 # -- Basic Tool Handlers --
 
-def run_create_task(subject: str, description: str = "",
-                    blockedBy: list[str] | None = None) -> str:
-    task = create_task(subject, description, blockedBy)
-    deps = f" (blockedBy: {', '.join(blockedBy)})" if blockedBy else ""
-    print(f"  \033[34m[create] {task.subject}{deps}\033[0m")
-    return f"Created {task.id}: {task.subject}{deps}"
+def run_create_task(subject: str, description: str = "") -> str:
+    task = create_task(subject, description)
+    print(f"  \033[34m[create] {task.subject}\033[0m")
+    return f"Created {task.id}: {task.subject}"
+
+
+def run_update_task(task_id: str, addBlockedBy: list[str]) -> str:
+    try:
+        task = update_task(task_id, addBlockedBy)
+    except ValueError as exc:
+        return f"Error: {exc}"
+    except FileNotFoundError:
+        return f"Error: Task {task_id} not found"
+    dependencies = ", ".join(task.blockedBy) or "(none)"
+    print(f"  \033[34m[update] {task.subject} blockedBy: {dependencies}\033[0m")
+    return f"Updated {task.id} blockedBy: {dependencies}"
 
 
 def run_list_tasks() -> str:
@@ -2745,13 +2806,26 @@ BUILTIN_TOOLS = [
      "input_schema": {"type": "object",
                       "properties": {"focus": {"type": "string"}},
                       "required": []}},
-    {"name": "create_task", "description": "Create a task.",
+    {"name": "create_task",
+     "description": "Create a task and return its runtime-generated ID.",
      "input_schema": {"type": "object",
                       "properties": {"subject": {"type": "string"},
-                                     "description": {"type": "string"},
-                                     "blockedBy": {"type": "array",
-                                                   "items": {"type": "string"}}},
-                      "required": ["subject"]}},
+                                     "description": {"type": "string"}},
+                      "required": ["subject"],
+                      "additionalProperties": False}},
+    {"name": "update_task",
+     "description": "Add dependencies using IDs returned by create_task.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "task_id": {"type": "string",
+                                      "pattern": "^task_[0-9a-f]{8}$"},
+                          "addBlockedBy": {
+                              "type": "array",
+                              "items": {"type": "string",
+                                        "pattern": "^task_[0-9a-f]{8}$"},
+                              "minItems": 1}},
+                      "required": ["task_id", "addBlockedBy"],
+                      "additionalProperties": False}},
     {"name": "list_tasks", "description": "List all tasks.",
      "input_schema": {"type": "object", "properties": {}, "required": []}},
     {"name": "get_task", "description": "Get full task details.",
@@ -2848,7 +2922,8 @@ BUILTIN_HANDLERS = {
     "glob": run_agent_glob,
     "todo_write": run_todo_write, "task": spawn_subagent,
     "load_skill": load_skill,
-    "create_task": run_create_task, "list_tasks": run_list_tasks,
+    "create_task": run_create_task, "update_task": run_update_task,
+    "list_tasks": run_list_tasks,
     "get_task": run_get_task,
     "claim_task": run_claim_task, "complete_task": run_complete_task,
     "schedule_cron": run_schedule_cron,

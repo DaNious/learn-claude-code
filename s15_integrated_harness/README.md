@@ -79,12 +79,12 @@ The loop keeps the same structure: call the model, check whether the response co
 
 ### Tools and Dispatch
 
-The built-in tool pool contains 25 tools:
+The built-in tool pool contains 26 tools:
 
 ```text
 bash, read_file, write_file, edit_file, glob
 todo_write, task, load_skill, compact
-create_task, list_tasks, get_task, claim_task, complete_task
+create_task, update_task, list_tasks, get_task, claim_task, complete_task
 schedule_cron, list_crons, cancel_cron
 spawn_teammate, list_teammates, send_message
 request_shutdown, request_plan, review_plan
@@ -126,6 +126,8 @@ S15 keeps two planning layers:
 The first keeps a single agent from drifting. The second supports team coordination.
 
 They share an intent, not an implementation: `todo_write` replaces one session checklist, while task records have stable IDs and individual lifecycle updates. The separate `task` tool below means "dispatch one isolated subagent"; it is not the Task System.
+
+Task graph construction remains two-phase in the integrated host: the Lead creates all task nodes first, then calls `update_task` with the runtime IDs returned by `create_task`. Teammates receive only list, claim, and complete operations, so dependency structure is fixed by the Lead before work is distributed.
 
 ### Subagents and Teams
 
@@ -238,4 +240,4 @@ Watch for:
 
 [s16 Workflow Runtime](../s16_workflow_runtime/) adds a `Workflow` tool to this host. A workflow keeps a fixed orchestration path in code and records progress so the same run can resume.
 
-<!-- translation-sync: zh@v13, en@v13, ja@v13 -->
+<!-- translation-sync: zh@v14, en@v14, ja@v14 -->

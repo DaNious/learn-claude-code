@@ -47,6 +47,8 @@ s13 reuses s10's base tools, hooks, permission checks, and Task System, then add
 - **Optional worktrees** bind a task to another working directory when the work needs it. Unbound tasks use the normal repository directory.
 - **Typed protocols and a plan gate** make shutdown and approval state explicit and block mutating tools until a required plan is approved.
 
+Task graph authoring keeps s10's two-phase contract. The Lead first calls `create_task` for every node, then uses the returned runtime IDs with `update_task(addBlockedBy=...)` before assigning ready work. Only the Lead receives `update_task`; teammates can list, claim, and complete tasks but cannot rewrite graph structure while the team is running.
+
 s11 background tasks and s12 scheduled tasks are not carried into this chapter. Neither mechanism is required for teammate communication, task claiming, or plan approval.
 
 These are all parts of the Team harness layer. Teammates do not need a separate loop for task discovery, and a worktree does not create a new kind of agent.
@@ -448,4 +450,4 @@ The Lead and its teammates can only call tools defined directly in `code.py`. Co
 
 s14 MCP Tools → Connect external services at runtime through one discovery and invocation protocol, then add their tools to the tool pool.
 
-<!-- translation-sync: zh@v11, en@v11, ja@v11 -->
+<!-- translation-sync: zh@v12, en@v12, ja@v12 -->

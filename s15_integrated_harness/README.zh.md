@@ -79,12 +79,12 @@ S15 不再引入新机制，而是把前面各章的组件集成到同一个 har
 
 ### 工具与分发
 
-内置工具池包含 25 个工具：
+内置工具池包含 26 个工具：
 
 ```text
 bash, read_file, write_file, edit_file, glob
 todo_write, task, load_skill, compact
-create_task, list_tasks, get_task, claim_task, complete_task
+create_task, update_task, list_tasks, get_task, claim_task, complete_task
 schedule_cron, list_crons, cancel_cron
 spawn_teammate, list_teammates, send_message
 request_shutdown, request_plan, review_plan
@@ -126,6 +126,8 @@ S15 同时保留两层计划：
 前者帮助单个 Agent 不漂移；后者支撑团队协作。
 
 两者目标相近，但实现不同：`todo_write` 整表替换当前会话清单，task record 则有稳定 ID 和单条生命周期更新。下面单独出现的 `task` 工具表示“一次性派发隔离 subagent”，不是 Task System。
+
+集成宿主中的任务图仍采用两阶段构建：Lead 先创建所有任务节点，再使用 `create_task` 返回的运行时 ID 调用 `update_task`。队友只能列举、认领和完成任务，因此依赖结构由 Lead 在分发工作前确定。
 
 ### 子 agent 与团队
 
@@ -238,4 +240,4 @@ python s15_integrated_harness/code.py
 
 [s16 Workflow Runtime](../s16_workflow_runtime/) 会在这个 host 中加入 `Workflow` 工具。Workflow 把固定的编排路径写在代码中，并记录运行进度，使同一次运行可以继续执行。
 
-<!-- translation-sync: zh@v13, en@v13, ja@v13 -->
+<!-- translation-sync: zh@v14, en@v14, ja@v14 -->

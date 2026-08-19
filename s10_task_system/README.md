@@ -26,7 +26,7 @@ This chapter adds a Task System. Each task has its own ID and status; `blockedBy
 
 ![Task System Overview](images/task-system-overview.en.svg)
 
-The code keeps S04's five base tools, Permission, Hooks, and shared `execute_tool`, then adds 5 task tools, persistence in the `.tasks/` directory, and `blockedBy` dependency checks.
+The code keeps S04's five base tools, Permission, Hooks, and shared `execute_tool`, then adds 6 task tools, persistence in the `.tasks/` directory, and `blockedBy` dependency checks.
 
 TodoWrite vs Task System:
 
@@ -69,12 +69,22 @@ IDs use the `task_` prefix followed by 8 random hexadecimal characters. Files ar
 ### create_task: Create Tasks
 
 ```python
-def create_task(subject: str, description: str = "",
-                blockedBy: list[str] | None = None) -> Task:
-    return TASKS.create(subject, description, blockedBy)
+def create_task(subject: str, description: str = "") -> Task:
+    return TASKS.create(subject, description)
 ```
 
-`TaskStore.create` checks the subject and dependency IDs, then writes `.tasks/{id}.json`. `blockedBy` declares dependencies; for example, "write API" can reference the database task's ID.
+`TaskStore.create` checks the subject, allocates a random ID, and writes `.tasks/{id}.json`. A new task always starts with an empty `blockedBy` list. The tool result returns the runtime-generated ID to the model.
+
+### update_task: Add Dependencies with Returned IDs
+
+```python
+def update_task(task_id: str, addBlockedBy: list[str]) -> Task:
+    return TASKS.update_dependencies(task_id, addBlockedBy)
+```
+
+Task graph construction uses two phases: create every node first, then call `update_task` with the IDs returned by `create_task` to add edges. This matters when the model emits several tool calls in one response: sibling calls are formed before any tool result exists, so one `create_task` call cannot consume another call's newly generated ID.
+
+`update_task` validates the entire change before saving it. The target and dependencies must exist, the target must still be pending and unowned, and the new edges must not introduce self-dependencies or cycles. Repeating an existing edge is safe and does not duplicate it.
 
 ### can_start: Dependency Check
 
@@ -159,11 +169,16 @@ Here `claim` / `complete` are actions, while `pending` / `in_progress` / `comple
 ### Putting It Together
 
 ```python
-# Create tasks with dependencies
+# Phase 1: create every node and receive its runtime ID
 schema = create_task("setup database schema")
-endpoints = create_task("create API endpoints", blockedBy=[schema.id])
-tests = create_task("write tests", blockedBy=[endpoints.id])
-docs = create_task("write docs", blockedBy=[schema.id])
+endpoints = create_task("create API endpoints")
+tests = create_task("write tests")
+docs = create_task("write docs")
+
+# Phase 2: add edges using those returned IDs
+update_task(endpoints.id, addBlockedBy=[schema.id])
+update_task(tests.id, addBlockedBy=[endpoints.id])
+update_task(docs.id, addBlockedBy=[schema.id])
 
 # Agent claims the first available task
 claim_task(schema.id)       # ✓ Claimed (no dependencies)
@@ -179,7 +194,7 @@ claim_task(tests.id)        # ✓ Claimed (endpoints completed)
 complete_task(tests.id)     # ✓ Completed
 ```
 
-Each `create_task` writes a JSON file, each `claim_task` / `complete_task` updates the file. Across sessions, the `.tasks/` directory persists — the agent reads the files to recover progress.
+Each `create_task` writes a JSON file; `update_task`, `claim_task`, and `complete_task` update it. Across sessions, the `.tasks/` directory persists — the agent reads the files to recover progress.
 
 ---
 
@@ -208,4 +223,4 @@ The task graph is in place, but full test suites, dependency installation, and d
 s11 Background Tasks → Slow operations run in the background. The Agent Loop can continue processing other tasks and receives a notification when the background work finishes.
 
 
-<!-- translation-sync: zh@v4, en@v4, ja@v4 -->
+<!-- translation-sync: zh@v5, en@v5, ja@v5 -->

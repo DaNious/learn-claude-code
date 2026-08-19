@@ -12,36 +12,72 @@
       "type": "tool_call",
       "toolName": "create_task",
       "content": "{\"subject\":\"Run tests\"}",
-      "annotation": "Tasks are created as JSON files under .tasks/."
+      "annotation": "The first phase creates task nodes without dependencies."
+    },
+    {
+      "type": "tool_result",
+      "toolName": "create_task",
+      "content": "Created task_a1b2c3d4: Run tests",
+      "annotation": "The host returns the runtime-generated ID after the tool executes."
     },
     {
       "type": "tool_call",
       "toolName": "create_task",
-      "content": "{\"subject\":\"Deploy release\",\"blockedBy\":[\"task_tests\"]}",
-      "annotation": "blockedBy encodes dependency ordering."
+      "content": "{\"subject\":\"Deploy release\"}",
+      "annotation": "Sibling create calls do not guess or predeclare IDs."
+    },
+    {
+      "type": "tool_result",
+      "toolName": "create_task",
+      "content": "Created task_5e6f7a8b: Deploy release",
+      "annotation": "The second node receives a different host-generated ID."
+    },
+    {
+      "type": "tool_call",
+      "toolName": "update_task",
+      "content": "{\"task_id\":\"task_5e6f7a8b\",\"addBlockedBy\":[\"task_a1b2c3d4\"]}",
+      "annotation": "The second phase adds an edge using IDs returned by create_task."
+    },
+    {
+      "type": "tool_result",
+      "toolName": "update_task",
+      "content": "Updated task_5e6f7a8b blockedBy: task_a1b2c3d4",
+      "annotation": "The runtime validates and persists the dependency graph."
     },
     {
       "type": "tool_call",
       "toolName": "claim_task",
-      "content": "{\"task_id\":\"task_deploy\",\"owner\":\"agent\"}",
+      "content": "{\"task_id\":\"task_5e6f7a8b\"}",
       "annotation": "The claim fails until dependencies are complete."
     },
     {
       "type": "tool_result",
       "toolName": "claim_task",
-      "content": "Blocked by: [\"task_tests\"]",
+      "content": "Blocked by: [\"task_a1b2c3d4\"]",
       "annotation": "The task graph prevents premature work."
     },
     {
       "type": "tool_call",
+      "toolName": "claim_task",
+      "content": "{\"task_id\":\"task_a1b2c3d4\"}",
+      "annotation": "The unblocked prerequisite is claimed before work begins."
+    },
+    {
+      "type": "tool_result",
+      "toolName": "claim_task",
+      "content": "Claimed task_a1b2c3d4 (Run tests)",
+      "annotation": "Claim moves the task from pending to in_progress."
+    },
+    {
+      "type": "tool_call",
       "toolName": "complete_task",
-      "content": "{\"task_id\":\"task_tests\"}",
+      "content": "{\"task_id\":\"task_a1b2c3d4\"}",
       "annotation": "Completing a dependency can unblock downstream tasks."
     },
     {
       "type": "tool_result",
       "toolName": "complete_task",
-      "content": "Completed task_tests\nUnblocked: Deploy release",
+      "content": "Completed task_a1b2c3d4 (Run tests)\nUnblocked: Deploy release",
       "annotation": "The harness reports newly available work."
     }
   ]

@@ -16,6 +16,20 @@
       }
     },
     {
+      "id": "runtime-owned-task-ids",
+      "title": "Create Nodes Before Adding Edges",
+      "description": "create_task returns a host-generated ID. After all nodes exist, update_task uses those returned IDs to add blockedBy edges and rejects invalid or cyclic changes.",
+      "alternatives": "Asking the model to invent persistent IDs can produce collisions or references that the host never created.",
+      "zh": {
+        "title": "先创建节点，再添加边",
+        "description": "create_task 返回宿主生成的 ID。所有节点创建后，update_task 使用这些返回的 ID 添加 blockedBy 边，并拒绝无效或成环的修改。"
+      },
+      "ja": {
+        "title": "ノードを作成してから辺を追加する",
+        "description": "create_task は host が生成した ID を返します。全ノードの作成後、update_task は返された ID で blockedBy の辺を追加し、無効な変更や循環を拒否します。"
+      }
+    },
+    {
       "id": "blockedby-dependencies",
       "title": "blockedBy Encodes Ordering",
       "description": "A task can only be claimed when all blockedBy dependencies are completed. Missing dependencies are treated as blocked to fail closed.",

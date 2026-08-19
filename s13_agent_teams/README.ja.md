@@ -47,6 +47,8 @@ s13 は s10 の基本ツール、Hooks、Permission、Task System を再利用�
 - **任意の worktree** は、必要なタスクだけを別の作業ディレクトリへ紐付ける。紐付けのないタスクは通常のリポジトリディレクトリを使う。
 - **型付きプロトコルと計画ゲート** は shutdown と承認状態を明示し、必要な計画が承認されるまで変更系ツールを止める。
 
+タスクグラフの作成は s10 の 2 段階契約を維持する。Lead はまず全ノードに `create_task` を呼び、返された実行時 ID で `update_task(addBlockedBy=...)` を実行してから ready task を割り当てる。`update_task` を使えるのは Lead だけであり、チームメイトは一覧・Claim・完了はできるが、チーム実行中にグラフ構造を変更できない。
+
 s11 の background task と s12 の scheduled task は本章へ持ち込まない。どちらも teammate communication、task claim、plan approval には必要ない。
 
 これらはすべて Team Harness レイヤーの一部である。タスク発見のために別の Agent Loop は要らず、worktree が別種の Agent を作るわけでもない。
@@ -447,4 +449,4 @@ Lead と teammate が呼び出せるのは、`code.py` に直接定義したツ�
 
 s14 MCP Tools → 共通の発見・呼び出しプロトコルで実行時に外部サービスへ接続し、そのツールを tool pool に追加する。
 
-<!-- translation-sync: zh@v11, en@v11, ja@v11 -->
+<!-- translation-sync: zh@v12, en@v12, ja@v12 -->
